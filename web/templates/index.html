@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maestro Setup Portal</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏠 Maestro IoT Setup</h1>
+            <p>Configure your device to connect to your home network</p>
+        </header>
+
+        <div class="setup-wizard">
+            <!-- Step 1: Welcome -->
+            <div class="step active" id="step-welcome">
+                <h2>Welcome to Maestro</h2>
+                <p>This wizard will help you connect your Maestro device to your WiFi network and set up Home Assistant.</p>
+                <button class="btn btn-primary" onclick="nextStep()">Get Started</button>
+            </div>
+
+            <!-- Step 2: WiFi Scan and Selection -->
+            <div class="step" id="step-wifi-scan">
+                <h2>Select Your WiFi Network</h2>
+                <div class="wifi-controls">
+                    <button class="btn btn-secondary" onclick="scanWiFi()" id="scan-btn">🔄 Scan Networks</button>
+                    <div class="scan-status" id="scan-status"></div>
+                </div>
+                
+                <div class="wifi-section">
+                    <div class="wifi-list" id="wifi-list">
+                        <div class="loading">Click 'Scan Networks' to find available WiFi</div>
+                    </div>
+                    
+                    <!-- WiFi Connection Form (hidden initially) -->
+                    <div class="wifi-connect-panel" id="wifi-connect-panel" style="display: none;">
+                        <div class="selected-network-info" id="selected-network-info"></div>
+                        <div class="connection-form">
+                            <div class="form-group">
+                                <label for="wifi-password">Password:</label>
+                                <input type="password" id="wifi-password" placeholder="Enter network password" autocomplete="new-password">
+                                <button type="button" class="password-toggle" onclick="togglePassword()">👁️</button>
+                            </div>
+                            <div class="form-actions">
+                                <button class="btn btn-secondary" onclick="cancelConnection()">Cancel</button>
+                                <button class="btn btn-primary" onclick="joinNetwork()" id="join-btn">Join Network</button>
+                            </div>
+                        </div>
+                        <div class="connection-status" id="connection-status"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Connection Validation -->
+            <div class="step" id="step-connection">
+                <h2>Connecting to Network</h2>
+                <div class="connection-progress">
+                    <div class="progress-steps">
+                        <div class="progress-step active" id="step-connecting">
+                            <div class="step-icon">📡</div>
+                            <div class="step-text">Connecting to WiFi...</div>
+                        </div>
+                        <div class="progress-step" id="step-validating">
+                            <div class="step-icon">✅</div>
+                            <div class="step-text">Validating connection...</div>
+                        </div>
+                        <div class="progress-step" id="step-transitioning">
+                            <div class="step-icon">🔄</div>
+                            <div class="step-text">Switching to home network...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="connection-details" id="connection-details"></div>
+            </div>
+
+            <!-- Step 4: Service Setup -->
+            <div class="step" id="step-services">
+                <h2>Starting Home Assistant</h2>
+                <div class="service-status">
+                    <div class="status-item">
+                        <span>WiFi Connection</span>
+                        <span class="status connected" id="wifi-final-status">✓ Connected</span>
+                    </div>
+                    <div class="status-item">
+                        <span>Home Assistant</span>
+                        <span class="status loading" id="ha-status">⏳ Starting...</span>
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="start-ha-btn" onclick="startHomeAssistant()">Start Home Assistant</button>
+            </div>
+
+            <!-- Step 5: Complete -->
+            <div class="step" id="step-complete">
+                <h2>Setup Complete!</h2>
+                <p>Your Maestro device is now connected and Home Assistant is running.</p>
+                <div class="completion-info">
+                    <p><strong>Connected Network:</strong> <span id="final-network-name">Your WiFi</span></p>
+                    <p><strong>Home Assistant URL:</strong> <a href="http://192.168.2.14:8123" target="_blank">http://192.168.2.14:8123</a></p>
+                    <p>You can now disconnect from this setup and use your device normally.</p>
+                </div>
+                <button class="btn btn-primary" onclick="window.open('http://192.168.2.14:8123', '_blank')">Open Home Assistant</button>
+            </div>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress" id="progress"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
