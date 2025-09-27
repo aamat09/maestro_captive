@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Maestro Captive Portal Installation Script
+# Maestro Captive Portal Installation Script with Full Captive Portal Setup
 
 set -e
 
-echo "Installing Maestro Captive Portal..."
+echo "Installing Maestro Captive Portal with Captive Portal Detection..."
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
@@ -28,7 +28,10 @@ apt-get install -y \
     hostapd \
     network-manager \
     libnl-3-dev \
-    libnl-genl-3-dev
+    libnl-genl-3-dev \
+    iptables \
+    iptables-persistent \
+    curl
 
 # Install Drogon framework
 echo "Installing Drogon framework..."
@@ -69,9 +72,16 @@ chmod +x /opt/maestro/captive/bin/maestro-captive
 echo "Installing web assets..."
 cp -r ../web/* /opt/maestro/captive/web/
 
-# Copy configuration
-echo "Installing configuration..."
-cp ../config/* /opt/maestro/captive/config/ 2>/dev/null || true
+# Copy configuration files
+echo "Installing configuration files..."
+cp -r ../config/* /opt/maestro/captive/config/ 2>/dev/null || true
+
+# Ensure configuration files exist in the right place
+if [ -f "/opt/maestro/config/dnsmasq.conf" ]; then
+    echo "DNSmasq configuration already in place"
+else
+    cp /opt/maestro/captive/config/* /opt/maestro/config/ 2>/dev/null || true
+fi
 
 # Create NetworkManager hotspot connection
 echo "Creating NetworkManager hotspot connection..."
@@ -89,20 +99,17 @@ nmcli connection add type wifi ifname wlan0 con-name maestro-hotspot autoconnect
 echo "Configuring systemd services..."
 systemctl daemon-reload
 systemctl enable maestro-captive.service
-systemctl enable maestro-hotspot.service
+systemctl enable maestro-hotspot.service  
 systemctl enable maestro-dhcp.service
 
-# Configure iptables rules for captive portal
-echo "Configuring firewall rules..."
-iptables -I INPUT -p tcp --dport 80 -j ACCEPT
-iptables -I INPUT -p tcp --dport 443 -j ACCEPT
-iptables -I INPUT -p udp --dport 53 -j ACCEPT
-iptables -I INPUT -p udp --dport 67 -j ACCEPT
+# Set up iptables persistence
+echo "Setting up iptables persistence..."
+# Save current iptables as baseline
+iptables-save > /etc/iptables/rules.v4
 
-# Save iptables rules
-if command -v iptables-save >/dev/null 2>&1; then
-    iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
-fi
+# Enable IP forwarding for captive portal
+echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-maestro-captive.conf
+sysctl -p /etc/sysctl.d/99-maestro-captive.conf
 
 # Create log rotation
 echo "Configuring log rotation..."
@@ -123,13 +130,28 @@ LOGEOF
 
 echo "Installation completed successfully!"
 echo ""
-echo "To start the captive portal mode:"
+echo "🌐 CAPTIVE PORTAL SETUP COMPLETE!"
+echo ""
+echo "To start captive portal mode:"
 echo "  systemctl start maestro-hotspot"
 echo "  systemctl start maestro-dhcp"
 echo "  systemctl start maestro-captive"
 echo ""
-echo "To configure WiFi and start Home Assistant:"
-echo "  Access http://192.168.4.1 on a connected device"
+echo "📱 Device Detection:"
+echo "  - WiFi Name: Maestro-Setup"
+echo "  - Password: maestro123"
+echo "  - Portal IP: 192.168.4.1"
+echo ""
+echo "✅ Automatic redirection configured for:"
+echo "  📱 Android devices (generate_204)"
+echo "  🍎 Apple devices (hotspot-detect.html)"
+echo "  🪟 Windows devices (connecttest.txt)"
+echo "  🦊 Firefox browsers (success.txt)"
+echo "  🐧 Ubuntu systems (connectivity-check)"
+echo ""
+echo "🔧 Test the captive portal:"
+echo "  cd /home/maestro/captive/test/temporary"
+echo "  ./captive_portal_test.sh"
 echo ""
 echo "Service status:"
 systemctl status maestro-captive.service --no-pager -l || true
