@@ -3,11 +3,11 @@
 #include <sstream>
 
 void CaptivePortalController::index(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& callback) {
-    std::ifstream file("/opt/maestro/captive/web/templates/index.html");
+    std::ifstream file("../web/templates/index.html");
     if (!file.is_open()) {
         auto resp = HttpResponse::newHttpResponse();
         resp->setStatusCode(k404NotFound);
-        resp->setBody("Template not found");
+        resp->setBody("Template not found: ../web/templates/index.html");
         callback(resp);
         return;
     }

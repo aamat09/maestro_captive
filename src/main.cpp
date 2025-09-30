@@ -1,6 +1,7 @@
 #include <drogon/drogon.h>
 #include <signal.h>
 #include <iostream>
+#include <sys/stat.h>
 #include "controllers/CaptivePortalController.h"
 #include "controllers/WiFiController.h"
 #include "controllers/ServiceController.h"
@@ -23,15 +24,21 @@ int main() {
     
     // Load configuration
     auto& config = ConfigManager::getInstance();
-    if (!config.load("/opt/maestro/captive/config/maestro.conf")) {
-        std::cerr << "Warning: Could not load configuration file" << std::endl;
+    std::string configPath = "../config/maestro.conf";
+    if (!config.load(configPath)) {
+        std::cerr << "Warning: Could not load configuration file: " << configPath << std::endl;
     }
-    
+
     // Configure Drogon
-    app().setLogPath("/var/log/maestro");
+    // Create logs directory if it doesn't exist
+    mkdir("./logs", 0755);
+    app().setLogPath("./logs");
     app().setLogLevel(trantor::Logger::kInfo);
-    app().addListener("0.0.0.0", 80);
-    app().setDocumentRoot("/opt/maestro/captive/web");
+
+    // Get port from configuration
+    int port = std::stoi(config.get("SERVER_PORT", "8080"));
+    app().addListener("0.0.0.0", port);
+    app().setDocumentRoot("../web");
     app().setStaticFilesCacheTime(86400); // 1 day cache for static files
     
     // Set thread pool size
@@ -51,7 +58,7 @@ int main() {
         return 1;
     }
     
-    std::cout << "Maestro Captive Portal started on port 80" << std::endl;
+    std::cout << "Maestro Captive Portal started on port " << port << std::endl;
     
     // Run the application
     app().run();

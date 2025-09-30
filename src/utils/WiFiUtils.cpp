@@ -1,14 +1,31 @@
 #include "utils/WiFiUtils.h"
+#include "utils/ConfigManager.h"
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <regex>
 
+#ifdef __linux__
+#define PLATFORM_LINUX 1
+#else
+#define PLATFORM_LINUX 0
+#endif
+
 std::vector<WiFiScanResult> WiFiUtils::scanNetworks() {
     std::vector<WiFiScanResult> results;
-    
-    // Use nmcli to scan for networks, filter out empty SSIDs
-    FILE* pipe = popen("nmcli -t -f SSID,SIGNAL,SECURITY dev wifi | grep -v '^:' | grep -v '^$'", "r");
+
+    // Return empty results on non-Linux platforms
+    #if !PLATFORM_LINUX
+    return results;
+    #endif
+
+    // Get network interface from config
+    auto& config = ConfigManager::getInstance();
+    std::string interface = config.get("NETWORK_INTERFACE", "wlan0");
+
+    // Use nmcli to scan for networks on specified interface, filter out empty SSIDs
+    std::string command = "nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list ifname " + interface + " 2>/dev/null | grep -v '^:' | grep -v '^$'";
+    FILE* pipe = popen(command.c_str(), "r");
     if (!pipe) return results;
     
     char buffer[256];
@@ -45,20 +62,35 @@ std::vector<WiFiScanResult> WiFiUtils::scanNetworks() {
 }
 
 bool WiFiUtils::connectToNetwork(const std::string& ssid, const std::string& password) {
-    std::string command = "nmcli dev wifi connect '" + ssid + "' password '" + password + "'";
+    #if !PLATFORM_LINUX
+    return false;
+    #endif
+
+    auto& config = ConfigManager::getInstance();
+    std::string interface = config.get("NETWORK_INTERFACE", "wlan0");
+
+    std::string command = "nmcli dev wifi connect '" + ssid + "' password '" + password + "' ifname " + interface;
     int result = system(command.c_str());
     return result == 0;
 }
 
 bool WiFiUtils::isConnected() {
+    #if !PLATFORM_LINUX
+    return false;
+    #endif
+
     int result = system("nmcli -t -f STATE general | grep -q connected");
     return result == 0;
 }
 
 std::string WiFiUtils::getCurrentSSID() {
+    #if !PLATFORM_LINUX
+    return "";
+    #endif
+
     FILE* pipe = popen("nmcli -t -f NAME connection show --active | head -1", "r");
     if (!pipe) return "";
-    
+
     char buffer[256];
     if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
         std::string ssid(buffer);
@@ -68,7 +100,7 @@ std::string WiFiUtils::getCurrentSSID() {
         pclose(pipe);
         return ssid;
     }
-    
+
     pclose(pipe);
     return "";
 }
