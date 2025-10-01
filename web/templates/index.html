@@ -14,6 +14,23 @@
         </header>
 
         <div class="setup-wizard">
+            <!-- WiFi Already Connected View -->
+            <div class="step" id="step-connected">
+                <h2>WiFi Connected</h2>
+                <div class="connected-info">
+                    <div class="status-item">
+                        <span>Current Network:</span>
+                        <strong id="connected-ssid">Loading...</strong>
+                    </div>
+                    <div class="status-item">
+                        <span>Signal Strength:</span>
+                        <strong id="connected-signal">Loading...</strong>
+                    </div>
+                </div>
+                <p>Your Maestro device is already connected to a WiFi network. You can disconnect and return to setup mode if needed.</p>
+                <button class="btn btn-danger" onclick="disconnectAndReset()">Disconnect & Return to Setup</button>
+            </div>
+
             <!-- Step 1: Welcome -->
             <div class="step active" id="step-welcome">
                 <h2>Welcome to Maestro</h2>

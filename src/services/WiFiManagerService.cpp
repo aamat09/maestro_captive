@@ -30,19 +30,23 @@ std::vector<WiFiNetwork> WiFiManagerService::scanNetworks() {
 
 bool WiFiManagerService::connectToNetwork(const std::string& ssid, const std::string& password) {
     // First disconnect from any current network
-    system("nmcli connection down  2>/dev/null");
-    
-    // Wait a moment for disconnect
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-    
+    std::string currentSSID = WiFiUtils::getCurrentSSID();
+    if (!currentSSID.empty()) {
+        std::string disconnectCmd = "nmcli connection down '" + currentSSID + "' 2>/dev/null";
+        system(disconnectCmd.c_str());
+
+        // Wait a moment for disconnect
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+
     // Attempt connection
     bool success = WiFiUtils::connectToNetwork(ssid, password);
-    
+
     if (success) {
         // Validate connection by checking if we can get an IP and the SSID matches
         for (int i = 0; i < 15; ++i) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
-            
+
             auto status = getConnectionStatus();
             if (status.connected && status.ssid == ssid) {
                 return true;
@@ -51,7 +55,7 @@ bool WiFiManagerService::connectToNetwork(const std::string& ssid, const std::st
         // Connection didn't validate within timeout
         return false;
     }
-    
+
     return false;
 }
 
@@ -82,7 +86,13 @@ WiFiStatus WiFiManagerService::getConnectionStatus() {
 }
 
 bool WiFiManagerService::disconnect() {
-    int result = system("nmcli connection down ");
+    std::string currentSSID = WiFiUtils::getCurrentSSID();
+    if (currentSSID.empty()) {
+        return true; // Already disconnected
+    }
+
+    std::string disconnectCmd = "nmcli connection down '" + currentSSID + "'";
+    int result = system(disconnectCmd.c_str());
     return result == 0;
 }
 

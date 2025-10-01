@@ -22,6 +22,7 @@ set(SOURCES
     src/services/HardwareSecurityService.cpp
     src/utils/WiFiUtils.cpp
     src/utils/ConfigManager.cpp
+    src/utils/Logger.cpp
 )
 
 # Create executable

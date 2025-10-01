@@ -1,5 +1,7 @@
 #include "controllers/WiFiController.h"
 #include "services/WiFiManagerService.h"
+#include "utils/ConfigManager.h"
+#include "utils/Logger.h"
 #include <json/json.h>
 
 void WiFiController::scanNetworks(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& callback) {
@@ -83,15 +85,15 @@ void WiFiController::disconnect(const HttpRequestPtr& req, std::function<void(co
 
 void WiFiController::validateConnectivity(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& callback) {
     auto& wifiService = WiFiManagerService::getInstance();
-    
+
     Json::Value response;
     response["status"] = "success";
-    
+
     // Check if we're connected to WiFi
     auto status = wifiService.getConnectionStatus();
     response["wifi_connected"] = status.connected;
     response["ssid"] = status.ssid;
-    
+
     if (status.connected) {
         // Validate internet connectivity
         bool hasInternet = wifiService.validateInternetConnectivity();
@@ -101,7 +103,60 @@ void WiFiController::validateConnectivity(const HttpRequestPtr& req, std::functi
         response["internet_connected"] = false;
         response["message"] = "Not connected to WiFi";
     }
-    
+
+    auto resp = HttpResponse::newHttpJsonResponse(response);
+    callback(resp);
+}
+
+void WiFiController::resetNetwork(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& callback) {
+    auto& wifiService = WiFiManagerService::getInstance();
+    auto& config = ConfigManager::getInstance();
+    auto& logger = Logger::getInstance();
+
+    Json::Value response;
+
+    try {
+        logger.info("Network reset requested");
+
+        // Disconnect from WiFi
+        logger.info("Attempting to disconnect from WiFi");
+        bool disconnected = wifiService.disconnect();
+
+        if (disconnected) {
+            logger.info("WiFi disconnected successfully");
+
+            // Start hotspot services
+            std::string hotspotService = config.get("HOTSPOT_SERVICE_NAME", "maestro-hotspot.service");
+            std::string dhcpService = config.get("DHCP_SERVICE_NAME", "maestro-dhcp.service");
+
+            logger.info("Starting hotspot service: " + hotspotService);
+            std::string startHotspotCmd = "systemctl start " + hotspotService;
+            int hotspotResult = system(startHotspotCmd.c_str());
+
+            logger.info("Starting DHCP service: " + dhcpService);
+            std::string startDhcpCmd = "systemctl start " + dhcpService;
+            int dhcpResult = system(startDhcpCmd.c_str());
+
+            if (hotspotResult == 0 && dhcpResult == 0) {
+                logger.info("Hotspot services started successfully");
+                response["status"] = "success";
+                response["message"] = "Network reset complete. Hotspot is now active.";
+            } else {
+                logger.error("Failed to start hotspot services (hotspot=" + std::to_string(hotspotResult) + ", dhcp=" + std::to_string(dhcpResult) + ")");
+                response["status"] = "warning";
+                response["message"] = "WiFi disconnected but failed to start hotspot";
+            }
+        } else {
+            logger.error("Failed to disconnect from WiFi");
+            response["status"] = "error";
+            response["message"] = "Failed to disconnect from WiFi";
+        }
+    } catch (const std::exception& e) {
+        logger.error("Network reset exception: " + std::string(e.what()));
+        response["status"] = "error";
+        response["message"] = std::string("Network reset failed: ") + e.what();
+    }
+
     auto resp = HttpResponse::newHttpJsonResponse(response);
     callback(resp);
 }

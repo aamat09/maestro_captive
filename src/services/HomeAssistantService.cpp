@@ -1,5 +1,8 @@
 #include "services/HomeAssistantService.h"
+#include "utils/ConfigManager.h"
 #include <cstdlib>
+#include <string>
+#include <sstream>
 
 HomeAssistantService& HomeAssistantService::getInstance() {
     static HomeAssistantService instance;
@@ -12,16 +15,37 @@ bool HomeAssistantService::initialize() {
 }
 
 bool HomeAssistantService::start() {
-    int result = system("cd /opt/maestro && docker-compose up -d homeassistant");
+    auto& config = ConfigManager::getInstance();
+    std::string dockerPath = config.get("DOCKER_COMPOSE_PATH", "/opt/maestro");
+    std::string serviceName = config.get("HOME_ASSISTANT_SERVICE_NAME", "homeassistant");
+
+    std::stringstream cmd;
+    cmd << "cd " << dockerPath << " && docker-compose up -d " << serviceName;
+
+    int result = system(cmd.str().c_str());
     return result == 0;
 }
 
 bool HomeAssistantService::stop() {
-    int result = system("cd /opt/maestro && docker-compose down");
+    auto& config = ConfigManager::getInstance();
+    std::string dockerPath = config.get("DOCKER_COMPOSE_PATH", "/opt/maestro");
+    std::string serviceName = config.get("HOME_ASSISTANT_SERVICE_NAME", "homeassistant");
+
+    std::stringstream cmd;
+    cmd << "cd " << dockerPath << " && docker-compose stop " << serviceName;
+
+    int result = system(cmd.str().c_str());
     return result == 0;
 }
 
 bool HomeAssistantService::isRunning() {
-    int result = system("cd /opt/maestro && docker-compose ps homeassistant | grep -q Up");
+    auto& config = ConfigManager::getInstance();
+    std::string dockerPath = config.get("DOCKER_COMPOSE_PATH", "/opt/maestro");
+    std::string serviceName = config.get("HOME_ASSISTANT_SERVICE_NAME", "homeassistant");
+
+    std::stringstream cmd;
+    cmd << "cd " << dockerPath << " && docker-compose ps " << serviceName << " | grep -q Up";
+
+    int result = system(cmd.str().c_str());
     return result == 0;
 }

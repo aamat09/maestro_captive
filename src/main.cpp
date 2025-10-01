@@ -8,6 +8,7 @@
 #include "services/WiFiManagerService.h"
 #include "services/HomeAssistantService.h"
 #include "utils/ConfigManager.h"
+#include "utils/Logger.h"
 
 using namespace drogon;
 
@@ -19,15 +20,27 @@ void signalHandler(int signum) {
 int main() {
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
-    
+
     std::cout << "Starting Maestro Captive Portal..." << std::endl;
-    
+
     // Load configuration
     auto& config = ConfigManager::getInstance();
     std::string configPath = "config/maestro.conf";
     if (!config.load(configPath)) {
-        std::cerr << "Warning: Could not load configuration file: " << configPath << std::endl;
+        std::cerr << "Warning: Could not load configuration file. Using defaults." << std::endl;
     }
+
+    // Initialize logger
+    auto& logger = Logger::getInstance();
+    std::string logPath = config.get("LOG_PATH", "/var/log/maestro");
+    logger.setLogFile(logPath + "/maestro-captive.log");
+    std::string logLevel = config.get("LOG_LEVEL", "INFO");
+    if (logLevel == "DEBUG") logger.setLevel(Logger::DEBUG);
+    else if (logLevel == "WARNING") logger.setLevel(Logger::WARNING);
+    else if (logLevel == "ERROR") logger.setLevel(Logger::ERROR);
+    else logger.setLevel(Logger::INFO);
+
+    logger.info("Maestro Captive Portal starting");
 
     // Configure Drogon
     // Create logs directory if it doesn't exist

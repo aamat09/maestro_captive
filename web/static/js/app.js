@@ -321,7 +321,61 @@ async function startHomeAssistant() {
     }
 }
 
+async function disconnectAndReset() {
+    const button = event.target;
+    button.disabled = true;
+    button.textContent = 'Disconnecting...';
+
+    try {
+        const response = await fetch('/api/wifi/reset', { method: 'POST' });
+        const data = await response.json();
+
+        if (data.status === 'success') {
+            // Wait a moment for services to restart
+            setTimeout(() => {
+                // Redirect to setup mode
+                showStep(0);
+                button.disabled = false;
+                button.textContent = 'Disconnect & Return to Setup';
+            }, 3000);
+        } else {
+            alert('Failed to disconnect: ' + (data.message || 'Unknown error'));
+            button.disabled = false;
+            button.textContent = 'Disconnect & Return to Setup';
+        }
+    } catch (error) {
+        console.error('Error disconnecting:', error);
+        alert('Error disconnecting from network');
+        button.disabled = false;
+        button.textContent = 'Disconnect & Return to Setup';
+    }
+}
+
+async function checkInitialWiFiStatus() {
+    try {
+        const response = await fetch('/api/wifi/status');
+        const data = await response.json();
+
+        if (data.status === 'success' && data.connected && data.ssid) {
+            // WiFi is connected - show connected view
+            document.getElementById('connected-ssid').textContent = data.ssid;
+            document.getElementById('connected-signal').textContent = data.signal + '%';
+
+            // Show the connected step instead of welcome
+            document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
+            document.getElementById('step-connected').classList.add('active');
+        } else {
+            // Not connected - show normal setup wizard
+            showStep(0);
+        }
+    } catch (error) {
+        console.error('Error checking WiFi status:', error);
+        // On error, show normal setup
+        showStep(0);
+    }
+}
+
 // Initialize the wizard
 document.addEventListener('DOMContentLoaded', function() {
-    showStep(0);
+    checkInitialWiFiStatus();
 });
