@@ -72,29 +72,189 @@ maestro-captive/
 - Docker and Docker Compose
 - CMake and C++ build tools
 
-### Quick Install
+### Production Installation
+
+#### 1. Install System Dependencies
 ```bash
-cd /home/maestro/captive
+# Install all required dependencies (non-interactive for automation)
+sudo DEBIAN_FRONTEND=noninteractive apt-get update
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    build-essential cmake libssl-dev libjsoncpp-dev uuid-dev \
+    zlib1g-dev libbrotli-dev git dnsmasq hostapd network-manager \
+    libnl-3-dev libnl-genl-3-dev iptables iptables-persistent curl
+
+# Fix any interrupted package installations
+sudo DEBIAN_FRONTEND=noninteractive dpkg --configure -a
+```
+
+#### 2. Install Drogon Framework
+```bash
+cd /tmp
+git clone https://github.com/drogonframework/drogon
+cd drogon
+git submodule update --init
+mkdir build && cd build
+cmake ..
+make -j$(nproc)
+sudo make install
+sudo ldconfig
+```
+
+#### 3. Build Maestro Captive Portal
+```bash
+cd /home/maestro/maestro_captive
+mkdir -p build && cd build
+cmake ..
+make -j$(nproc)
+```
+
+#### 4. Install to System
+```bash
+# Create directory structure
+sudo mkdir -p /opt/maestro/captive/{bin,config,web/{templates,static/{css,js}},logs}
+sudo mkdir -p /var/log/maestro
+
+# Install binary and assets
+sudo cp maestro-captive /opt/maestro/captive/bin/
+sudo chmod +x /opt/maestro/captive/bin/maestro-captive
+sudo cp -r ../web/* /opt/maestro/captive/web/
+sudo cp -r ../config/* /opt/maestro/captive/config/
+```
+
+#### 5. Configure Wireless Interface
+**IMPORTANT:** Update the wireless interface name in the configuration file to match your system.
+
+```bash
+# Find your wireless interface name
+ip link show | grep -E "^[0-9]+: w"
+
+# Edit the configuration file
+sudo nano /opt/maestro/captive/config/maestro.conf
+# Change NETWORK_INTERFACE=wlan0 to your actual interface (e.g., wlo2, wlp2s0)
+```
+
+#### 6. Create Systemd Services
+Create `/etc/systemd/system/maestro-captive.service`:
+```ini
+[Unit]
+Description=Maestro Captive Portal Service
+Documentation=https://github.com/aamat09/maestro_captive
+After=network.target maestro-hotspot.service maestro-dhcp.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/maestro/captive
+ExecStart=/opt/maestro/captive/bin/maestro-captive
+Restart=always
+RestartSec=10
+KillMode=mixed
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=maestro-captive
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Create `/etc/systemd/system/maestro-hotspot.service`:
+```ini
+[Unit]
+Description=Maestro WiFi Hotspot Service
+Documentation=https://github.com/aamat09/maestro_captive
+After=network.target NetworkManager.service
+Requires=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/nmcli connection up maestro-hotspot
+ExecStop=/usr/bin/nmcli connection down maestro-hotspot
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Create `/etc/systemd/system/maestro-dhcp.service`:
+```ini
+[Unit]
+Description=Maestro DHCP/DNS Service for Captive Portal
+Documentation=https://github.com/aamat09/maestro_captive
+After=network.target maestro-hotspot.service
+Requires=maestro-hotspot.service
+
+[Service]
+Type=forking
+PIDFile=/run/dnsmasq-maestro.pid
+ExecStartPre=/bin/mkdir -p /opt/maestro/config
+ExecStart=/usr/sbin/dnsmasq --conf-file=/opt/maestro/config/dnsmasq.conf --pid-file=/run/dnsmasq-maestro.pid
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Create dnsmasq configuration at `/opt/maestro/config/dnsmasq.conf`:
+```conf
+# Maestro Captive Portal DNS/DHCP Configuration
+
+# Interface to listen on (update to match your wireless interface)
+interface=wlo2
+bind-interfaces
+
+# DHCP range for captive portal clients
+dhcp-range=192.168.4.50,192.168.4.150,12h
+
+# DNS settings - redirect all DNS queries to captive portal
+address=/#/192.168.4.1
+
+# Do not read /etc/resolv.conf or /etc/hosts
+no-resolv
+no-hosts
+
+# Log for debugging (optional)
+log-queries
+log-dhcp
+
+# Cache size
+cache-size=1000
+
+# Disable negative caching
+no-negcache
+```
+
+#### 7. Enable and Start Services
+```bash
+# Reload systemd to recognize new services
+sudo systemctl daemon-reload
+
+# Enable services to start on boot
+sudo systemctl enable maestro-captive.service
+sudo systemctl enable maestro-hotspot.service
+sudo systemctl enable maestro-dhcp.service
+
+# Start the captive portal
+sudo systemctl start maestro-captive.service
+
+# Check status
+sudo systemctl status maestro-captive.service
+```
+
+### Quick Install (Automated)
+```bash
+cd /home/maestro/maestro_captive
 chmod +x scripts/install.sh
 sudo ./scripts/install.sh
 ```
 
-### Manual Build
-```bash
-# Install dependencies
-sudo apt-get install build-essential cmake libssl-dev libjsoncpp-dev \
-    network-manager dnsmasq hostapd docker-compose
-
-# Install Drogon framework
-git clone https://github.com/drogonframework/drogon
-cd drogon && mkdir build && cd build
-cmake .. && make -j$(nproc) && sudo make install
-
-# Build Maestro Captive Portal
-cd /home/maestro/captive
-mkdir build && cd build
-cmake .. && make -j$(nproc)
-```
+**Note:** The automated installer may require manual configuration of the wireless interface name in `/opt/maestro/captive/config/maestro.conf`
 
 ## Usage
 
@@ -117,7 +277,54 @@ cmake .. && make -j$(nproc)
 - `maestro-hotspot.service` - WiFi hotspot management
 - `maestro-dhcp.service` - DHCP/DNS server for captive portal
 
+## Configuration
+
+### Key Configuration Files
+
+#### `/opt/maestro/captive/config/maestro.conf`
+Main configuration file for the captive portal:
+```conf
+NETWORK_INTERFACE=wlo2        # Update to your wireless interface
+HOTSPOT_SSID=Maestro-Setup
+HOTSPOT_PASSWORD=maestro123
+HOTSPOT_IP=192.168.4.1
+SERVER_PORT=8080
+```
+
+**Important Notes:**
+- The `NETWORK_INTERFACE` must match your system's actual wireless interface name
+- Use `ip link show` to find your wireless interface name
+- Common names: `wlan0`, `wlo2`, `wlp2s0`, `wlp3s0`
+
+### Path Configuration
+
+The application uses **relative paths** from the working directory. The systemd service sets `WorkingDirectory=/opt/maestro/captive`, which means:
+
+- Configuration: `config/maestro.conf` → `/opt/maestro/captive/config/maestro.conf`
+- Web templates: `web/templates/` → `/opt/maestro/captive/web/templates/`
+- Static files: `web/static/` → `/opt/maestro/captive/web/static/`
+- Logs: `logs/` → `/opt/maestro/captive/logs/`
+
 ## Development
+
+### Recent Code Changes (2025-10-01)
+
+#### Path Handling
+Changed from absolute/parent-relative paths to relative paths for better portability:
+
+**src/main.cpp:**
+- `../config/maestro.conf` → `config/maestro.conf`
+- `../web` → `web`
+- `./logs` → `logs`
+
+**src/controllers/CaptivePortalController.cpp:**
+- `../web/templates/index.html` → `web/templates/index.html`
+
+These paths are now relative to the working directory set in the systemd service (`/opt/maestro/captive`).
+
+#### Configuration
+- Added wireless interface configuration documentation
+- Emphasized the need to configure `NETWORK_INTERFACE` in `maestro.conf` to match the actual wireless interface on the system
 
 ### Testing
 ```bash
@@ -131,6 +338,24 @@ rm test_program  # Clean up after testing
 - All temporary test files go in `test/temporary/`
 - Unit tests belong in `test/unit/`
 - No test files in project root
+
+### Troubleshooting
+
+#### WiFi Scanning Not Working
+1. Check your wireless interface name: `ip link show | grep -E "^[0-9]+: w"`
+2. Update `/opt/maestro/captive/config/maestro.conf` with the correct interface name
+3. Restart the service: `sudo systemctl restart maestro-captive.service`
+4. Verify NetworkManager is managing the interface: `nmcli device status`
+
+#### Web UI Shows 404
+1. Verify the working directory in the systemd service is `/opt/maestro/captive`
+2. Check that web files exist: `ls -la /opt/maestro/captive/web/`
+3. Check service logs: `journalctl -u maestro-captive.service -f`
+
+#### Static Files Not Loading
+1. Verify document root is set: Check logs for Drogon configuration
+2. Test static file access: `curl -I http://localhost:8080/static/js/app.js`
+3. Check file permissions: `ls -la /opt/maestro/captive/web/static/`
 
 ## Commercial Deployment
 

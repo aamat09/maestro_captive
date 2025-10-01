@@ -24,21 +24,21 @@ int main() {
     
     // Load configuration
     auto& config = ConfigManager::getInstance();
-    std::string configPath = "../config/maestro.conf";
+    std::string configPath = "config/maestro.conf";
     if (!config.load(configPath)) {
         std::cerr << "Warning: Could not load configuration file: " << configPath << std::endl;
     }
 
     // Configure Drogon
     // Create logs directory if it doesn't exist
-    mkdir("./logs", 0755);
-    app().setLogPath("./logs");
+    mkdir("logs", 0755);
+    app().setLogPath("logs");
     app().setLogLevel(trantor::Logger::kInfo);
 
     // Get port from configuration
     int port = std::stoi(config.get("SERVER_PORT", "8080"));
     app().addListener("0.0.0.0", port);
-    app().setDocumentRoot("../web");
+    app().setDocumentRoot("web");
     app().setStaticFilesCacheTime(86400); // 1 day cache for static files
     
     // Set thread pool size
