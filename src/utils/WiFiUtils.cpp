@@ -88,7 +88,13 @@ std::string WiFiUtils::getCurrentSSID() {
     return "";
     #endif
 
-    FILE* pipe = popen("nmcli -t -f NAME connection show --active | head -1", "r");
+    // Get network interface from config
+    auto& config = ConfigManager::getInstance();
+    std::string interface = config.get("NETWORK_INTERFACE", "wlan0");
+
+    // Get the active WiFi connection for the specified interface
+    std::string command = "nmcli -t -f GENERAL.CONNECTION dev show " + interface + " 2>/dev/null | cut -d: -f2";
+    FILE* pipe = popen(command.c_str(), "r");
     if (!pipe) return "";
 
     char buffer[256];
@@ -98,6 +104,12 @@ std::string WiFiUtils::getCurrentSSID() {
             ssid.pop_back();
         }
         pclose(pipe);
+
+        // Return empty if it's "--" (not connected) or empty
+        if (ssid == "--" || ssid.empty()) {
+            return "";
+        }
+
         return ssid;
     }
 
