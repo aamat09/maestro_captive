@@ -14,6 +14,15 @@ bool WiFiManagerService::initialize() {
 }
 
 std::vector<WiFiNetwork> WiFiManagerService::scanNetworks(bool full_scan) {
+    // If not doing full scan and we have cached results, return them
+    if (!full_scan) {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        if (!cachedNetworks.empty()) {
+            return cachedNetworks;
+        }
+    }
+
+    // Perform actual scan
     auto scanResults = WiFiUtils::scanNetworks(full_scan);
     std::vector<WiFiNetwork> networks;
 
@@ -23,6 +32,12 @@ std::vector<WiFiNetwork> WiFiManagerService::scanNetworks(bool full_scan) {
         network.signal = result.signal_strength;
         network.security = result.security;
         networks.push_back(network);
+    }
+
+    // Update cache
+    {
+        std::lock_guard<std::mutex> lock(cacheMutex);
+        cachedNetworks = networks;
     }
 
     return networks;

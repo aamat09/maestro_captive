@@ -28,7 +28,8 @@ function nextStep() {
     if (currentStep < steps.length - 1) {
         showStep(currentStep + 1);
         if (currentStep === 1) {
-            document.getElementById('scan-status').textContent = 'Ready to scan for networks';
+            // Automatically trigger WiFi scan when entering WiFi selection step
+            scanWiFi();
         }
     }
 }
