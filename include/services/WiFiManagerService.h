@@ -20,7 +20,7 @@ public:
     static WiFiManagerService& getInstance();
     
     bool initialize();
-    std::vector<WiFiNetwork> scanNetworks();
+    std::vector<WiFiNetwork> scanNetworks(bool full_scan = false);
     bool connectToNetwork(const std::string& ssid, const std::string& password);
     WiFiStatus getConnectionStatus();
     bool disconnect();

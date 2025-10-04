@@ -37,27 +37,58 @@ function prevStep() {
     if (currentStep > 0) showStep(currentStep - 1);
 }
 
-async function scanWiFi() {
+async function scanWiFi(fullScan = false) {
     const wifiList = document.getElementById('wifi-list');
     const scanBtn = document.getElementById('scan-btn');
+    const rescanBtn = document.getElementById('rescan-btn');
     const scanStatus = document.getElementById('scan-status');
 
     scanBtn.classList.add('loading');
     scanBtn.disabled = true;
-    scanStatus.textContent = 'Scanning for networks...';
-    wifiList.innerHTML = '<div class="loading">Scanning for networks...</div>';
+    if (rescanBtn) {
+        rescanBtn.classList.add('loading');
+        rescanBtn.disabled = true;
+    }
+
+    if (fullScan) {
+        scanStatus.textContent = 'Full scan - hotspot will briefly disconnect...';
+        wifiList.innerHTML = '<div class="loading">⚠️ Full channel scan in progress...<br>You may need to reconnect to Maestro-Setup</div>';
+    } else {
+        scanStatus.textContent = 'Scanning for networks...';
+        wifiList.innerHTML = '<div class="loading">Scanning for networks...</div>';
+    }
 
     try {
-        const response = await fetch('/api/wifi/scan');
+        const url = fullScan ? '/api/wifi/scan?full_scan=true' : '/api/wifi/scan';
+        const response = await fetch(url);
         const data = await response.json();
 
         if (data.status === 'success') {
             wifiList.innerHTML = '';
-            scanStatus.textContent = `Found ${data.networks.length} networks`;
+            const scanType = data.scan_type === 'full' ? ' (all channels)' : ' (cached)';
+            scanStatus.textContent = `Found ${data.networks.length} networks${scanType}`;
 
             if (data.networks.length === 0) {
-                wifiList.innerHTML = '<div class="loading">No networks found. Try scanning again.</div>';
+                wifiList.innerHTML = `
+                    <div class="loading">
+                        No networks found.
+                        ${!fullScan ? '<br>Try a <strong>full rescan</strong> to search all channels.' : ''}
+                    </div>
+                `;
                 return;
+            }
+
+            // Show rescan button if not already doing full scan
+            if (!fullScan && !document.getElementById('rescan-btn')) {
+                const rescanContainer = document.createElement('div');
+                rescanContainer.className = 'rescan-container';
+                rescanContainer.innerHTML = `
+                    <p class="rescan-hint">Can't find your network? Try a full rescan (all channels)</p>
+                    <button id="rescan-btn" class="btn btn-secondary" onclick="fullRescan()">
+                        🔄 Full Rescan (Brief Disconnect)
+                    </button>
+                `;
+                wifiList.parentElement.insertBefore(rescanContainer, wifiList);
             }
 
             data.networks.forEach(network => {
@@ -91,6 +122,16 @@ async function scanWiFi() {
     } finally {
         scanBtn.classList.remove('loading');
         scanBtn.disabled = false;
+        if (rescanBtn) {
+            rescanBtn.classList.remove('loading');
+            rescanBtn.disabled = false;
+        }
+    }
+}
+
+async function fullRescan() {
+    if (confirm('⚠️ Full rescan will briefly disconnect the hotspot while scanning all WiFi channels.\n\nYou may need to reconnect to Maestro-Setup after the scan.\n\nContinue?')) {
+        await scanWiFi(true);
     }
 }
 

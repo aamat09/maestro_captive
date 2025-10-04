@@ -13,10 +13,10 @@ bool WiFiManagerService::initialize() {
     return true;
 }
 
-std::vector<WiFiNetwork> WiFiManagerService::scanNetworks() {
-    auto scanResults = WiFiUtils::scanNetworks();
+std::vector<WiFiNetwork> WiFiManagerService::scanNetworks(bool full_scan) {
+    auto scanResults = WiFiUtils::scanNetworks(full_scan);
     std::vector<WiFiNetwork> networks;
-    
+
     for (const auto& result : scanResults) {
         WiFiNetwork network;
         network.ssid = result.ssid;
@@ -24,7 +24,7 @@ std::vector<WiFiNetwork> WiFiManagerService::scanNetworks() {
         network.security = result.security;
         networks.push_back(network);
     }
-    
+
     return networks;
 }
 

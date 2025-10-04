@@ -5,13 +5,21 @@
 #include <json/json.h>
 
 void WiFiController::scanNetworks(const HttpRequestPtr& req, std::function<void(const HttpResponsePtr&)>&& callback) {
+    // Check for full_scan parameter
+    bool full_scan = false;
+    auto params = req->getParameters();
+    if (params.find("full_scan") != params.end()) {
+        full_scan = (params.at("full_scan") == "true" || params.at("full_scan") == "1");
+    }
+
     auto& wifiService = WiFiManagerService::getInstance();
-    auto networks = wifiService.scanNetworks();
-    
+    auto networks = wifiService.scanNetworks(full_scan);
+
     Json::Value jsonResponse;
     jsonResponse["status"] = "success";
+    jsonResponse["scan_type"] = full_scan ? "full" : "cached";
     jsonResponse["networks"] = Json::Value(Json::arrayValue);
-    
+
     for (const auto& network : networks) {
         Json::Value networkJson;
         networkJson["ssid"] = network.ssid;
@@ -19,7 +27,7 @@ void WiFiController::scanNetworks(const HttpRequestPtr& req, std::function<void(
         networkJson["security"] = network.security;
         jsonResponse["networks"].append(networkJson);
     }
-    
+
     auto resp = HttpResponse::newHttpJsonResponse(jsonResponse);
     callback(resp);
 }
