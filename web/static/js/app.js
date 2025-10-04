@@ -81,7 +81,7 @@ async function scanWiFi(fullScan = false) {
                                 🔄 Full Rescan (All Channels)
                             </button>
                         `;
-                        wifiList.parentElement.insertBefore(rescanContainer, wifiList);
+                        wifiList.parentElement.appendChild(rescanContainer);
                     }
                 } else {
                     wifiList.innerHTML = '<div class="loading">No networks found. Try scanning again.</div>';
@@ -94,12 +94,12 @@ async function scanWiFi(fullScan = false) {
                 const rescanContainer = document.createElement('div');
                 rescanContainer.className = 'rescan-container';
                 rescanContainer.innerHTML = `
-                    <p class="rescan-hint">Can't find your network? Try a full rescan (all channels)</p>
+                    <p class="rescan-hint">Can't find your network?</p>
                     <button id="rescan-btn" class="btn btn-secondary" onclick="fullRescan()">
                         🔄 Full Rescan (All Channels)
                     </button>
                 `;
-                wifiList.parentElement.insertBefore(rescanContainer, wifiList);
+                wifiList.parentElement.appendChild(rescanContainer);
             }
 
             data.networks.forEach(network => {
