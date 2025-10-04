@@ -18,16 +18,12 @@ std::vector<WiFiScanResult> WiFiUtils::scanNetworks(bool full_scan) {
     #endif
 
     if (full_scan) {
+        // Full scan: stop hostapd, scan all channels, restart hostapd
         return fullScanWithInterruption();
+    } else {
+        // Quick scan: use virtual interface (single channel, no interruption)
+        return scanWithVirtualInterface();
     }
-
-    // Try cache first, fallback to virtual interface scan
-    auto results = scanFromCache();
-    if (!results.empty()) {
-        return results;
-    }
-
-    return scanWithVirtualInterface();
 }
 
 std::vector<WiFiScanResult> WiFiUtils::scanFromCache() {
@@ -135,18 +131,21 @@ std::vector<WiFiScanResult> WiFiUtils::scanWithVirtualInterface() {
             current_security = "WPA";
         }
         else if (line.find("BSS ") == 0 && !current_ssid.empty()) {
-            WiFiScanResult result;
-            result.ssid = current_ssid;
-            result.signal_strength = std::min(100, std::max(0, (current_signal + 100) * 2));
-            result.security = current_security;
-            results.push_back(result);
+            // Filter out hidden SSIDs
+            if (current_ssid.find("\\x00") == std::string::npos) {
+                WiFiScanResult result;
+                result.ssid = current_ssid;
+                result.signal_strength = std::min(100, std::max(0, (current_signal + 100) * 2));
+                result.security = current_security;
+                results.push_back(result);
+            }
             current_ssid.clear();
             current_signal = 0;
             current_security.clear();
         }
     }
 
-    if (!current_ssid.empty()) {
+    if (!current_ssid.empty() && current_ssid.find("\\x00") == std::string::npos) {
         WiFiScanResult result;
         result.ssid = current_ssid;
         result.signal_strength = std::min(100, std::max(0, (current_signal + 100) * 2));
@@ -214,18 +213,21 @@ std::vector<WiFiScanResult> WiFiUtils::fullScanWithInterruption() {
             current_security = "WPA";
         }
         else if (line.find("BSS ") == 0 && !current_ssid.empty()) {
-            WiFiScanResult result;
-            result.ssid = current_ssid;
-            result.signal_strength = std::min(100, std::max(0, (current_signal + 100) * 2));
-            result.security = current_security;
-            results.push_back(result);
+            // Filter out hidden SSIDs
+            if (current_ssid.find("\\x00") == std::string::npos) {
+                WiFiScanResult result;
+                result.ssid = current_ssid;
+                result.signal_strength = std::min(100, std::max(0, (current_signal + 100) * 2));
+                result.security = current_security;
+                results.push_back(result);
+            }
             current_ssid.clear();
             current_signal = 0;
             current_security.clear();
         }
     }
 
-    if (!current_ssid.empty()) {
+    if (!current_ssid.empty() && current_ssid.find("\\x00") == std::string::npos) {
         WiFiScanResult result;
         result.ssid = current_ssid;
         result.signal_strength = std::min(100, std::max(0, (current_signal + 100) * 2));

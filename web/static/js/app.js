@@ -40,22 +40,17 @@ function prevStep() {
 async function scanWiFi(fullScan = false) {
     const wifiList = document.getElementById('wifi-list');
     const scanBtn = document.getElementById('scan-btn');
-    const rescanBtn = document.getElementById('rescan-btn');
     const scanStatus = document.getElementById('scan-status');
 
     scanBtn.classList.add('loading');
     scanBtn.disabled = true;
-    if (rescanBtn) {
-        rescanBtn.classList.add('loading');
-        rescanBtn.disabled = true;
-    }
 
     if (fullScan) {
-        scanStatus.textContent = 'Full scan - hotspot will briefly disconnect...';
-        wifiList.innerHTML = '<div class="loading">⚠️ Full channel scan in progress...<br>You may need to reconnect to Maestro-Setup</div>';
+        scanStatus.textContent = 'Scanning all channels...';
+        wifiList.innerHTML = '<div class="loading">Full scan in progress...<br>Hotspot will briefly restart</div>';
     } else {
-        scanStatus.textContent = 'Scanning for networks...';
-        wifiList.innerHTML = '<div class="loading">Scanning for networks...</div>';
+        scanStatus.textContent = 'Scanning nearby networks...';
+        wifiList.innerHTML = '<div class="loading">Scanning nearby networks...</div>';
     }
 
     try {
@@ -65,27 +60,42 @@ async function scanWiFi(fullScan = false) {
 
         if (data.status === 'success') {
             wifiList.innerHTML = '';
-            const scanType = data.scan_type === 'full' ? ' (all channels)' : ' (cached)';
-            scanStatus.textContent = `Found ${data.networks.length} networks${scanType}`;
+            scanStatus.textContent = `Found ${data.networks.length} networks`;
 
             if (data.networks.length === 0) {
-                wifiList.innerHTML = `
-                    <div class="loading">
-                        No networks found.
-                        ${!fullScan ? '<br>Try a <strong>full rescan</strong> to search all channels.' : ''}
-                    </div>
-                `;
+                if (!fullScan) {
+                    wifiList.innerHTML = `
+                        <div class="loading">
+                            No networks found on this channel.<br>
+                            <strong>Try a full rescan to search all WiFi channels.</strong>
+                        </div>
+                    `;
+                    // Show rescan button for empty results too
+                    if (!document.getElementById('rescan-btn')) {
+                        const rescanContainer = document.createElement('div');
+                        rescanContainer.className = 'rescan-container';
+                        rescanContainer.innerHTML = `
+                            <p class="rescan-hint">⚠️ Full rescan will briefly disconnect the hotspot</p>
+                            <button id="rescan-btn" class="btn btn-secondary" onclick="fullRescan()">
+                                🔄 Full Rescan (All Channels)
+                            </button>
+                        `;
+                        wifiList.parentElement.insertBefore(rescanContainer, wifiList);
+                    }
+                } else {
+                    wifiList.innerHTML = '<div class="loading">No networks found. Try scanning again.</div>';
+                }
                 return;
             }
 
-            // Show rescan button if not already doing full scan
+            // Show rescan button if not doing full scan
             if (!fullScan && !document.getElementById('rescan-btn')) {
                 const rescanContainer = document.createElement('div');
                 rescanContainer.className = 'rescan-container';
                 rescanContainer.innerHTML = `
                     <p class="rescan-hint">Can't find your network? Try a full rescan (all channels)</p>
                     <button id="rescan-btn" class="btn btn-secondary" onclick="fullRescan()">
-                        🔄 Full Rescan (Brief Disconnect)
+                        🔄 Full Rescan (All Channels)
                     </button>
                 `;
                 wifiList.parentElement.insertBefore(rescanContainer, wifiList);
@@ -122,17 +132,11 @@ async function scanWiFi(fullScan = false) {
     } finally {
         scanBtn.classList.remove('loading');
         scanBtn.disabled = false;
-        if (rescanBtn) {
-            rescanBtn.classList.remove('loading');
-            rescanBtn.disabled = false;
-        }
     }
 }
 
 async function fullRescan() {
-    if (confirm('⚠️ Full rescan will briefly disconnect the hotspot while scanning all WiFi channels.\n\nYou may need to reconnect to Maestro-Setup after the scan.\n\nContinue?')) {
-        await scanWiFi(true);
-    }
+    await scanWiFi(true);
 }
 
 function getSignalBars(signal) {
