@@ -352,6 +352,8 @@ async function disconnectAndReset() {
 }
 
 async function checkInitialWiFiStatus() {
+    const wizard = document.querySelector('.setup-wizard');
+
     try {
         const response = await fetch('/api/wifi/status');
         const data = await response.json();
@@ -372,6 +374,9 @@ async function checkInitialWiFiStatus() {
         console.error('Error checking WiFi status:', error);
         // On error, show normal setup
         showStep(0);
+    } finally {
+        // Show the wizard with fade-in effect
+        wizard.style.opacity = '1';
     }
 }
 

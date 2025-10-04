@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <regex>
+#include <unistd.h>
 
 #ifdef __linux__
 #define PLATFORM_LINUX 1
@@ -22,42 +23,99 @@ std::vector<WiFiScanResult> WiFiUtils::scanNetworks() {
     // Get network interface from config
     auto& config = ConfigManager::getInstance();
     std::string interface = config.get("NETWORK_INTERFACE", "wlan0");
+    std::string scan_interface = interface + "_scan";
 
-    // Use nmcli to scan for networks on specified interface, filter out empty SSIDs
-    std::string command = "nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list ifname " + interface + " 2>/dev/null | grep -v '^:' | grep -v '^$'";
+    // Create virtual interface for scanning if it doesn't exist
+    bool created_vif = false;
+    if (system(("ip link show " + scan_interface + " >/dev/null 2>&1").c_str()) != 0) {
+        // Virtual interface doesn't exist, create it
+        if (system(("iw dev " + interface + " interface add " + scan_interface + " type managed").c_str()) == 0) {
+            created_vif = true;
+            system(("ip link set " + scan_interface + " up").c_str());
+        }
+    } else {
+        // Virtual interface exists, just bring it up
+        system(("ip link set " + scan_interface + " up").c_str());
+    }
+
+    // Use the scan interface if available, otherwise fall back to main interface
+    std::string scan_dev = (created_vif || system(("ip link show " + scan_interface + " >/dev/null 2>&1").c_str()) == 0)
+                          ? scan_interface : interface;
+
+    // Trigger scan using iw
+    system(("iw dev " + scan_dev + " scan > /dev/null 2>&1").c_str());
+
+    // Get scan results using iw
+    std::string command = "iw dev " + scan_dev + " scan 2>/dev/null";
     FILE* pipe = popen(command.c_str(), "r");
-    if (!pipe) return results;
-    
-    char buffer[256];
+    if (!pipe) {
+        if (created_vif) {
+            system(("iw dev " + scan_interface + " del 2>/dev/null").c_str());
+        }
+        return results;
+    }
+
+    char buffer[512];
+    std::string current_ssid;
+    int current_signal = 0;
+    std::string current_security;
+
     while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
         std::string line(buffer);
-        if (line.empty()) continue;
-        
-        // Remove newline
-        if (!line.empty() && line.back() == '\n') {
-            line.pop_back();
-        }
-        
-        // Parse nmcli output format: SSID:SIGNAL:SECURITY
-        size_t first_colon = line.find(':');
-        size_t second_colon = line.find(':', first_colon + 1);
-        
-        if (first_colon != std::string::npos && second_colon != std::string::npos) {
-            WiFiScanResult result;
-            result.ssid = line.substr(0, first_colon);
-            
-            std::string signal_str = line.substr(first_colon + 1, second_colon - first_colon - 1);
-            result.signal_strength = signal_str.empty() ? 0 : std::stoi(signal_str);
-            
-            result.security = line.substr(second_colon + 1);
-            
-            if (!result.ssid.empty()) {
-                results.push_back(result);
+
+        // Check for SSID
+        if (line.find("SSID: ") != std::string::npos) {
+            size_t pos = line.find("SSID: ") + 6;
+            current_ssid = line.substr(pos);
+            if (!current_ssid.empty() && current_ssid.back() == '\n') {
+                current_ssid.pop_back();
             }
         }
+
+        // Check for signal strength
+        else if (line.find("signal: ") != std::string::npos) {
+            size_t pos = line.find("signal: ") + 8;
+            std::string signal_str = line.substr(pos);
+            // Extract number (format: "-XX.00 dBm")
+            current_signal = std::stoi(signal_str);
+        }
+
+        // Check for security (WPA/WPA2/RSN)
+        else if (line.find("WPA:") != std::string::npos || line.find("RSN:") != std::string::npos) {
+            current_security = "WPA";
+        }
+
+        // BSS end marker - save current network
+        else if (line.find("BSS ") == 0 && !current_ssid.empty()) {
+            WiFiScanResult result;
+            result.ssid = current_ssid;
+            result.signal_strength = std::min(100, std::max(0, (current_signal + 100) * 2));
+            result.security = current_security;
+            results.push_back(result);
+
+            // Reset for next network
+            current_ssid.clear();
+            current_signal = 0;
+            current_security.clear();
+        }
     }
-    
+
+    // Add last network if exists
+    if (!current_ssid.empty()) {
+        WiFiScanResult result;
+        result.ssid = current_ssid;
+        result.signal_strength = std::min(100, std::max(0, (current_signal + 100) * 2));
+        result.security = current_security;
+        results.push_back(result);
+    }
+
     pclose(pipe);
+
+    // Clean up virtual interface if we created it
+    if (created_vif) {
+        system(("iw dev " + scan_interface + " del 2>/dev/null").c_str());
+    }
+
     return results;
 }
 
@@ -69,9 +127,43 @@ bool WiFiUtils::connectToNetwork(const std::string& ssid, const std::string& pas
     auto& config = ConfigManager::getInstance();
     std::string interface = config.get("NETWORK_INTERFACE", "wlan0");
 
-    std::string command = "nmcli dev wifi connect '" + ssid + "' password '" + password + "' ifname " + interface;
-    int result = system(command.c_str());
-    return result == 0;
+    // Stop hotspot services
+    system("systemctl stop maestro-dnsmasq maestro-hostapd 2>/dev/null");
+
+    // Bring interface down and up
+    system(("ip link set " + interface + " down").c_str());
+    system(("ip addr flush dev " + interface).c_str());
+    system(("ip link set " + interface + " up").c_str());
+
+    // Add network to wpa_supplicant
+    std::string add_network_cmd = "wpa_cli -i " + interface + " add_network 2>/dev/null";
+    FILE* pipe = popen(add_network_cmd.c_str(), "r");
+    if (!pipe) return false;
+
+    char buffer[128];
+    int network_id = -1;
+    if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        network_id = std::stoi(buffer);
+    }
+    pclose(pipe);
+
+    if (network_id < 0) return false;
+
+    // Configure network
+    std::string set_ssid = "wpa_cli -i " + interface + " set_network " + std::to_string(network_id) + " ssid '\"" + ssid + "\"'";
+    std::string set_psk = "wpa_cli -i " + interface + " set_network " + std::to_string(network_id) + " psk '\"" + password + "\"'";
+    std::string enable_network = "wpa_cli -i " + interface + " enable_network " + std::to_string(network_id);
+    std::string save_config = "wpa_cli -i " + interface + " save_config";
+
+    system(set_ssid.c_str());
+    system(set_psk.c_str());
+    system(enable_network.c_str());
+    system(save_config.c_str());
+
+    // Request DHCP
+    system(("dhclient " + interface + " 2>/dev/null &").c_str());
+
+    return true;
 }
 
 bool WiFiUtils::isConnected() {
@@ -79,7 +171,12 @@ bool WiFiUtils::isConnected() {
     return false;
     #endif
 
-    int result = system("nmcli -t -f STATE general | grep -q connected");
+    auto& config = ConfigManager::getInstance();
+    std::string interface = config.get("NETWORK_INTERFACE", "wlan0");
+
+    // Check if wpa_supplicant shows connected state
+    std::string command = "wpa_cli -i " + interface + " status 2>/dev/null | grep -q 'wpa_state=COMPLETED'";
+    int result = system(command.c_str());
     return result == 0;
 }
 
@@ -92,8 +189,8 @@ std::string WiFiUtils::getCurrentSSID() {
     auto& config = ConfigManager::getInstance();
     std::string interface = config.get("NETWORK_INTERFACE", "wlan0");
 
-    // Get the active WiFi connection for the specified interface
-    std::string command = "nmcli -t -f GENERAL.CONNECTION dev show " + interface + " 2>/dev/null | cut -d: -f2";
+    // Get current SSID from wpa_supplicant status
+    std::string command = "wpa_cli -i " + interface + " status 2>/dev/null | grep '^ssid=' | cut -d= -f2";
     FILE* pipe = popen(command.c_str(), "r");
     if (!pipe) return "";
 
@@ -105,8 +202,13 @@ std::string WiFiUtils::getCurrentSSID() {
         }
         pclose(pipe);
 
-        // Return empty if it's "--" (not connected) or empty
-        if (ssid == "--" || ssid.empty()) {
+        // Return empty if empty or not in completed state
+        if (ssid.empty()) {
+            return "";
+        }
+
+        // Verify we're actually connected
+        if (!isConnected()) {
             return "";
         }
 
