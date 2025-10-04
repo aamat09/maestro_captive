@@ -2,6 +2,8 @@
 #include <signal.h>
 #include <iostream>
 #include <sys/stat.h>
+#include <thread>
+#include <unistd.h>
 #include "controllers/CaptivePortalController.h"
 #include "controllers/WiFiController.h"
 #include "controllers/ServiceController.h"
@@ -60,19 +62,28 @@ int main() {
     // Initialize services
     auto& wifiService = WiFiManagerService::getInstance();
     auto& haService = HomeAssistantService::getInstance();
-    
+
     if (!wifiService.initialize()) {
         std::cerr << "Failed to initialize WiFi Manager Service" << std::endl;
         return 1;
     }
-    
+
     if (!haService.initialize()) {
         std::cerr << "Failed to initialize Home Assistant Service" << std::endl;
         return 1;
     }
-    
+
     std::cout << "Maestro Captive Portal started on port " << port << std::endl;
-    
+
+    // Perform initial WiFi scan on startup in background thread
+    std::thread([]() {
+        sleep(2); // Wait for server to fully start
+        std::cout << "Performing initial WiFi scan..." << std::endl;
+        auto& wifiService = WiFiManagerService::getInstance();
+        wifiService.scanNetworks(true); // Full scan on startup
+        std::cout << "Initial WiFi scan completed" << std::endl;
+    }).detach();
+
     // Run the application
     app().run();
     
