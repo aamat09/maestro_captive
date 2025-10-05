@@ -485,6 +485,8 @@ header p {
     padding: 10px 15px;
     margin-top: 15px;
     text-align: center;
+    flex-basis: 100%;
+    width: 100%;
 }
 
 .rescan-hint {
